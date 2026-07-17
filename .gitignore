@@ -1,0 +1,22 @@
+node_modules
+dist
+*.local
+.env
+.env.*
+!.env.example
+
+# DeskThing build output
+*.zip
+
+# logs / scratch
+*.log
+.DS_Store
+/tmp
+scratch/
+
+# local editor/agent tooling
+.claude/
+
+# recorded audio buffers from the push-to-talk pipeline
+server/**/*.wav
+recordings/

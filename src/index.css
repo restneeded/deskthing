@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * The Spotify Car Thing panel is 800x480. We lock the app to that box, kill
+ * page scroll/overscroll, and use large touch targets throughout.
+ */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #06070c;
+  color: #e8ecf5;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+button:focus {
+  outline: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* the mic ring pulse while listening */
+@keyframes aura-pulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  70% { transform: scale(1.9); opacity: 0; }
+  100% { opacity: 0; }
+}
+.aura-pulse {
+  animation: aura-pulse 1.6s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+
+/* the thinking shimmer */
+@keyframes aura-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.aura-shimmer {
+  background: linear-gradient(90deg, #3a3f52 25%, #565d78 50%, #3a3f52 75%);
+  background-size: 200% 100%;
+  animation: aura-shimmer 1.4s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
