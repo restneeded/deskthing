@@ -91,6 +91,32 @@ Full method, mixer un-muting, and the device-tree route (if capture is disabled)
 
 **You need:** a jailbroken Car Thing running DeskThing, Node 18+, a Govee API key, and an xAI (Grok) API key. For voice, also a mic + STT server. Full walkthrough in [`docs/`](docs/).
 
+### Install into DeskThing (end users)
+
+**Easiest — paste the repo link (no download):**
+
+1. DeskThing desktop → **Downloads**
+2. **Add repository** (or similar “add from URL”)
+3. Paste one of these:
+   - `restneeded/deskthing`
+   - `https://github.com/restneeded/deskthing`
+4. Install **Aura** from the list that appears
+5. Open Aura **Settings** and paste your keys (table below)
+
+DeskThing reads `latest.json` / `aura.json` from [Releases](https://github.com/restneeded/deskthing/releases/latest) and pulls the built zip itself.
+
+**Alternate — load the zip by URL** (if your DeskThing build only accepts a direct package URL):
+
+```
+https://github.com/restneeded/deskthing/releases/latest/download/aura-v0.1.0.zip
+```
+
+> **Do not install GitHub "Source code (zip)" or clone the repo into DeskThing.** That is the *source tree*. DeskThing needs the *built* package (`manifest.json` at the zip root). Source installs fail with `Unable to find the new app manifest`.
+
+If a previous failed install left junk, quit DeskThing and delete `%AppData%\deskthing\apps\staged`, then retry.
+
+### Build from source (developers)
+
 ```bash
 git clone https://github.com/restneeded/deskthing
 cd deskthing
@@ -100,7 +126,7 @@ npm install
 npm run dev
 
 # …or build the loadable package
-npm run build          # → dist/aura-vX.Y.Z.zip
+npm run build          # → dist/aura-vX.Y.Z.zip  (this is what you upload)
 ```
 
 Then in the **DeskThing desktop app**: *Downloads → Load from file →* pick `dist/aura-*.zip`, open Aura's **Settings**, and paste your keys:

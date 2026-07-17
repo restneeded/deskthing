@@ -14,6 +14,6 @@
   "repository": "https://github.com/restneeded/deskthing",
   "tags": ["utility"],
   "requiredVersions": { "server": ">=0.11.0", "client": ">=0.11.0" },
-  "updateUrl": "",
+  "updateUrl": "https://github.com/restneeded/deskthing",
   "template": "base"
 }
