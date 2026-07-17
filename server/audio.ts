@@ -156,6 +156,8 @@ function pickTts() {
     ttsBin = { cmd: "espeak-ng", args: (t) => [t] };
   } else if (hasBin("espeak")) {
     ttsBin = { cmd: "espeak", args: (t) => [t] };
+  } else if (platform() === "win32") {
+    ttsBin = { cmd: "powershell", args: () => [] }; // handled specially in speak()
   } else {
     ttsBin = null;
   }
@@ -164,8 +166,28 @@ function pickTts() {
 
 /** Speak a reply on the host's speakers. Fire-and-forget; never throws. */
 export function speak(text: string): void {
+  if (!text) return;
+  if (platform() === "win32") {
+    try {
+      const p = spawn(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          "Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Speak([Console]::In.ReadToEnd())",
+        ],
+        { stdio: ["pipe", "ignore", "ignore"] },
+      );
+      p.stdin?.write(text);
+      p.stdin?.end();
+      p.on("error", () => {});
+      return;
+    } catch {
+      return;
+    }
+  }
   const t = pickTts();
-  if (!t || !text) return;
+  if (!t) return;
   try {
     const p = spawn(t.cmd, t.args(text), { stdio: "ignore" });
     p.on("error", () => {});
@@ -175,5 +197,6 @@ export function speak(text: string): void {
 }
 
 export function ttsAvailable(): boolean {
+  if (platform() === "win32") return true;
   return pickTts() !== null;
 }

@@ -1,36 +1,40 @@
 /**
- * Aura server — the DeskThing app backend.
+ * Aura server — DeskThing app backend.
  *
- * Responsibilities:
- *   - expose settings (API keys, voice options) in the DeskThing UI
- *   - hold the Grok + Govee + STT clients and the host mic recorder
- *   - handle messages from the Car Thing client and drive the assistant loop
- *
- * All the interesting logic lives in the sibling modules; this file is the glue.
+ * Glue: settings, LLM (OpenRouter/xAI/custom), Govee, STT, mic, wake loop,
+ * and client message dispatch.
  */
 import { DeskThing } from "@deskthing/server";
 import { AppSettings, DESKTHING_EVENTS } from "@deskthing/types";
 
 import { log } from "./log.ts";
 import { GoveeClient } from "./govee.ts";
-import { GrokClient } from "./grok.ts";
+import { LlmClient, DEFAULT_MODELS } from "./llm.ts";
 import { SttClient } from "./stt.ts";
 import { Recorder, speak, ttsAvailable, type MicRecorder } from "./audio.ts";
 import { AdbRecorder } from "./adb-mic.ts";
 import { executeTool } from "./tools.ts";
 import { SCENES, findScene } from "./scenes.ts";
-import { SETTINGS_SCHEMA, readSettings, type AuraSettings } from "./settings.ts";
+import {
+  SETTINGS_SCHEMA,
+  readSettings,
+  resolveLlmBaseUrl,
+  type AuraSettings,
+} from "./settings.ts";
+import { WakeLoop, parseWakeWords } from "./wake.ts";
 import { AURA, type ServerRequest, type ActionSummary, type AuraReply } from "./types.ts";
 
 /* ------------------------------- app state -------------------------------- */
 
 let settings: AuraSettings | null = null;
 let govee: GoveeClient | null = null;
-let grok: GrokClient | null = null;
+let llm: LlmClient | null = null;
 let stt: SttClient | null = null;
 let recorder: MicRecorder | null = null;
-let recorderKey = ""; // rebuild the recorder only when mic settings change
+let recorderKey = "";
 let busy = false;
+let pttActive = false;
+let wake: WakeLoop | null = null;
 
 /* ----------------------------- client transport --------------------------- */
 
@@ -43,11 +47,19 @@ function setStatus(state: string, detail?: string): void {
 }
 
 function pushConfig(): void {
+  const voiceOn =
+    !!settings &&
+    settings.voiceMode !== "off" &&
+    !!recorder?.available &&
+    !!stt?.configured;
   send("config", {
-    hasGrok: !!settings?.grokApiKey,
+    hasLlm: !!settings?.llmApiKey,
+    hasGrok: !!settings?.llmApiKey,
     hasGovee: !!settings?.goveeApiKey,
-    voiceEnabled: !!(settings?.voiceInput && recorder?.available && stt?.configured),
-    model: settings?.grokModel ?? "",
+    voiceEnabled: voiceOn,
+    voiceMode: settings?.voiceMode ?? "off",
+    model: settings?.llmModel ?? "",
+    provider: settings?.llmProvider ?? "openrouter",
     deviceCount: govee?.devices.length ?? 0,
   });
 }
@@ -58,20 +70,58 @@ function pushDevices(): void {
 
 /* --------------------------- (re)configuration ---------------------------- */
 
+function syncWakeLoop(): void {
+  const want =
+    !!settings &&
+    settings.voiceMode === "wake" &&
+    !!recorder?.available &&
+    !!stt?.configured &&
+    parseWakeWords(settings.wakeWords).length > 0;
+
+  if (want) {
+    if (!wake) {
+      wake = new WakeLoop({
+        getRecorder: () => recorder,
+        getStt: () => stt,
+        getWakeWords: () => parseWakeWords(settings?.wakeWords ?? ""),
+        isBusy: () => busy || pttActive,
+        isEnabled: () => settings?.voiceMode === "wake",
+        onStatus: setStatus,
+        onUtterance: (text) => handleUtterance(text, true),
+      });
+    }
+    if (!wake.active) wake.start();
+  } else {
+    wake?.stop();
+  }
+}
+
 async function configure(raw: AppSettings | null): Promise<void> {
   settings = readSettings(raw);
 
   govee = settings.goveeApiKey ? new GoveeClient(settings.goveeApiKey) : null;
-  grok = settings.grokApiKey
-    ? new GrokClient({ apiKey: settings.grokApiKey, model: settings.grokModel, govee })
-    : null;
+
+  if (settings.llmApiKey) {
+    const baseUrl = resolveLlmBaseUrl(settings.llmProvider, settings.llmBaseUrl);
+    const model =
+      settings.llmModel || DEFAULT_MODELS[settings.llmProvider];
+    llm = new LlmClient({
+      apiKey: settings.llmApiKey,
+      model,
+      baseUrl,
+      provider: settings.llmProvider,
+      govee,
+    });
+  } else {
+    llm = null;
+  }
+
   stt = new SttClient({
     baseUrl: settings.sttBaseUrl,
     apiKey: settings.sttApiKey,
     model: settings.sttModel,
   });
 
-  // (Re)build the mic recorder only when the mic settings actually change.
   const key = `${settings.micSource}|${settings.adbSerial}|${settings.deviceCaptureCmd}`;
   if (!recorder || key !== recorderKey) {
     recorder?.cancel();
@@ -83,24 +133,24 @@ async function configure(raw: AppSettings | null): Promise<void> {
           })
         : new Recorder();
     recorderKey = key;
-    log.info(`Mic source: ${settings.micSource} (recorder available: ${recorder.available})`);
+    log.info(`Mic source: ${settings.micSource} (available: ${recorder.available})`);
   }
 
   if (govee) {
     try {
-      // GrokClient reads govee.devices live at run-time, so populating the cache
-      // here is enough — no need to rebuild the Grok client.
       await govee.listDevices();
     } catch (e) {
       log.error("Failed to load Govee devices:", (e as Error).message);
     }
   }
 
+  syncWakeLoop();
   pushConfig();
   pushDevices();
   log.info(
-    `Configured — Grok:${grok ? "yes" : "no"} Govee:${govee ? "yes" : "no"} ` +
-      `voice:${settings.voiceInput ? "on" : "off"} tts:${settings.speakReplies && ttsAvailable() ? "on" : "off"}`,
+    `Configured — LLM:${llm ? `${settings.llmProvider}/${settings.llmModel}` : "no"} ` +
+      `Govee:${govee ? "yes" : "no"} voice:${settings.voiceMode} ` +
+      `tts:${settings.speakReplies && ttsAvailable() ? "on" : "off"}`,
   );
 }
 
@@ -114,15 +164,17 @@ async function handleUtterance(text: string, showTranscript = false): Promise<vo
   }
   if (showTranscript) send("transcript", { text: utter });
 
-  if (!grok) {
-    replyError("Add your xAI (Grok) API key in the app settings to start talking.");
+  if (!llm) {
+    replyError(
+      "Add an LLM API key in settings (OpenRouter recommended — openrouter.ai/keys).",
+    );
     return;
   }
   if (busy) return;
   busy = true;
   try {
     setStatus("thinking");
-    const reply = await grok.run(utter, (s) => setStatus(s));
+    const reply = await llm.run(utter, (s) => setStatus(s));
     emitReply(reply);
   } catch (e) {
     log.error("assistant error:", (e as Error).message);
@@ -145,7 +197,6 @@ function replyError(msg: string): void {
   send("reply", reply);
 }
 
-/** Scene buttons and quick chips bypass Grok for an instant response. */
 async function applySceneDirect(sceneId: string): Promise<void> {
   const scene = findScene(sceneId);
   if (!scene) return replyError(`Unknown scene "${sceneId}".`);
@@ -173,7 +224,6 @@ function sceneReplyText(label: string, actions: ActionSummary[]): string {
   return ok ? `${label} scene on ${ok} light${ok === 1 ? "" : "s"}.` : `Couldn't apply ${label}.`;
 }
 
-/** Direct tool execution (device on/off buttons, "all on/off" chips) — no LLM. */
 async function controlDirect(tool: string, args: Record<string, unknown>): Promise<void> {
   if (!govee) return replyError("Add your Govee API key in the app settings first.");
   if (!tool || busy) return;
@@ -203,6 +253,7 @@ function summarizeActions(actions: ActionSummary[]): string {
 /* ------------------------------ push-to-talk ------------------------------ */
 
 async function pttStop(): Promise<void> {
+  pttActive = false;
   if (!recorder) return;
   setStatus("transcribing");
   let file: string | null = null;
@@ -210,7 +261,7 @@ async function pttStop(): Promise<void> {
     file = await recorder.stop();
     if (!file) return setStatus("idle");
     if (!stt?.configured) {
-      replyError("Voice input needs an STT server — set one in the app settings.");
+      replyError("Voice needs an STT server — set one in app settings (local Whisper recommended).");
       return;
     }
     const transcript = await stt.transcribe(file);
@@ -263,9 +314,11 @@ async function onClientMessage(data: any): Promise<void> {
       break;
     case "ptt_start":
       try {
+        pttActive = true;
         recorder?.start();
         setStatus("listening");
       } catch (e) {
+        pttActive = false;
         replyError((e as Error).message);
       }
       break;
@@ -273,6 +326,7 @@ async function onClientMessage(data: any): Promise<void> {
       await pttStop();
       break;
     case "ptt_cancel":
+      pttActive = false;
       recorder?.cancel();
       setStatus("idle");
       break;
@@ -293,17 +347,16 @@ const start = async () => {
 };
 
 const stop = async () => {
+  wake?.stop();
   recorder?.cancel();
   log.info("Aura stopped.");
 };
 
-// react to settings edits in the DeskThing UI
 DeskThing.on(DESKTHING_EVENTS.SETTINGS, async (data: any) => {
   const raw = (data?.payload ?? data) as AppSettings;
   await configure(raw);
 });
 
-// all client -> server app messages ride on the "aura" type
 DeskThing.on(AURA as any, onClientMessage as any);
 
 DeskThing.on(DESKTHING_EVENTS.START, start);

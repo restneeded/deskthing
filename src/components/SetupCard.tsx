@@ -8,7 +8,7 @@ interface Props {
 /** Shown when required keys are missing — points the user at DeskThing settings. */
 const SetupCard: React.FC<Props> = ({ config }) => {
   const need: string[] = [];
-  if (!config.hasGrok) need.push("xAI (Grok) API key");
+  if (!(config.hasLlm || config.hasGrok)) need.push("LLM API key (OpenRouter recommended)");
   if (!config.hasGovee) need.push("Govee API key");
 
   return (
@@ -17,7 +17,7 @@ const SetupCard: React.FC<Props> = ({ config }) => {
         <div className="text-4xl mb-2">✨</div>
         <h2 className="text-xl font-bold mb-1">Almost there</h2>
         <p className="text-sm text-white/60 mb-4">
-          Open this app's <span className="text-white/80">settings</span> in the DeskThing
+          Open this app&apos;s <span className="text-white/80">settings</span> in the DeskThing
           desktop app and add:
         </p>
         <ul className="text-left text-sm space-y-1.5 mb-4">
@@ -28,8 +28,7 @@ const SetupCard: React.FC<Props> = ({ config }) => {
           ))}
         </ul>
         <p className="text-xs text-white/40">
-          Grok is the brain, Govee controls the lights. See the README for where to get each
-          key.
+          OpenRouter = one key, any model. Govee = lights. See docs/API_KEYS.md.
         </p>
       </div>
     </div>

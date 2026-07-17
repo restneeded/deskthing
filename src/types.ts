@@ -1,5 +1,4 @@
-// UI-side mirror of the server message payloads (kept lightweight; the server
-// is the source of truth for actual colors/behavior).
+// UI-side mirror of the server message payloads.
 
 export interface LightDevice {
   id: string;
@@ -22,10 +21,13 @@ export interface AuraReply {
 }
 
 export interface AuraConfigFlags {
+  hasLlm?: boolean;
   hasGrok: boolean;
   hasGovee: boolean;
   voiceEnabled: boolean;
+  voiceMode?: string;
   model: string;
+  provider?: string;
   deviceCount: number;
 }
 
@@ -49,7 +51,6 @@ export interface Message {
   actions?: ActionSummary[];
 }
 
-// Presentation-only scene list (labels + emoji). Colors live server-side.
 export interface SceneButton {
   id: string;
   label: string;

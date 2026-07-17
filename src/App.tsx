@@ -80,7 +80,8 @@ const App: React.FC = () => {
     send("control", { tool: "set_power", args: { target: name, on } });
   }, []);
 
-  const needsSetup = config && (!config.hasGrok || !config.hasGovee);
+  const hasLlm = !!(config?.hasLlm || config?.hasGrok);
+  const needsSetup = config && (!hasLlm || !config.hasGovee);
 
   return (
     <div className="relative h-screen w-screen flex flex-col bg-[#06070c] text-white overflow-hidden">
@@ -91,17 +92,17 @@ const App: React.FC = () => {
         <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
           <Conversation messages={messages} status={status} />
           <DeviceStrip devices={devices} onPower={onPower} />
-          {/* Not gated on config: if a key is missing the SetupCard overlay blocks
-              input anyway, and otherwise the server replies with a clear hint. */}
           <QuickBar onChat={onChat} onControl={onControl} />
         </div>
 
-        {/* Right: push-to-talk + scenes */}
+        {/* Right: mic / wake + scenes */}
         <aside className="w-[300px] shrink-0 flex flex-col gap-3 p-3 border-l border-white/10">
           <PushToTalk
             voiceEnabled={!!config?.voiceEnabled}
+            voiceMode={config?.voiceMode}
             listening={status.state === "listening"}
-            disabled={status.state === "thinking" || status.state === "acting"}
+            statusDetail={status.detail}
+            disabled={status.state === "thinking" || status.state === "acting" || status.state === "transcribing"}
             onStart={() => send("ptt_start")}
             onStop={() => send("ptt_stop")}
           />

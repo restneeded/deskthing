@@ -31,8 +31,13 @@ const StatusBar: React.FC<Props> = ({ status, config, onRefresh }) => {
     <header className="flex items-center justify-between px-4 h-12 border-b border-white/10 shrink-0">
       <div className="flex items-center gap-2">
         <span className="text-lg font-bold tracking-tight">Aura</span>
-        <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/5 text-white/50">
-          Grok · Govee
+        <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/5 text-white/50 max-w-[160px] truncate">
+          {config?.provider === "openrouter"
+            ? "OpenRouter"
+            : config?.provider === "xai"
+              ? "xAI"
+              : config?.provider || "LLM"}
+          {" · Govee"}
         </span>
       </div>
       <div className="flex items-center gap-3">

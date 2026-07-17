@@ -12,11 +12,11 @@ export const AURA = "aura" as const;
 export type ClientRequest =
   | "chat" // { text }        user typed or on-device transcribed text
   | "ptt_start" //             begin host-mic recording (push-to-talk pressed)
-  | "ptt_stop" //              stop recording -> transcribe -> run through Grok
+  | "ptt_stop" //              stop recording -> transcribe -> run through LLM
   | "ptt_cancel" //            abort recording, do nothing
   | "scene" // { sceneId }     apply a built-in preset scene
-  | "control" // { tool, args } run a light tool directly (instant, skips Grok)
-  | "quick" // { text }        a canned command chip (routed through Grok like chat)
+  | "control" // { tool, args } run a light tool directly (instant, skips LLM)
+  | "quick" // { text }        a canned command chip (routed through LLM like chat)
   | "refresh_devices" //       re-list Govee devices
   | "get_state"; //            ask for a fresh snapshot (config + devices)
 
@@ -29,11 +29,17 @@ export type ServerRequest =
   | "reply"; // { AuraReply }  the assistant's answer + what it did
 
 export interface AuraConfigFlags {
+  /** LLM API key present */
+  hasLlm: boolean;
+  /** @deprecated use hasLlm — kept so older clients don't blank out */
   hasGrok: boolean;
   hasGovee: boolean;
-  /** voice input (host mic + STT) is fully configured and available */
+  /** voice path configured (mic + STT + mode not off) */
   voiceEnabled: boolean;
+  /** off | ptt | wake */
+  voiceMode: string;
   model: string;
+  provider: string;
   deviceCount: number;
 }
 
