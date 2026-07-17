@@ -13,6 +13,7 @@ import {
 export type MicSource = "host" | "carthing";
 export type DeviceCaptureCmd = "auto" | "arecord" | "tinycap";
 export type VoiceMode = "off" | "ptt" | "wake";
+export type WakeEngineSetting = "auto" | "porcupine" | "stt";
 
 export const IDS = {
   llmProvider: "llmProvider",
@@ -21,7 +22,12 @@ export const IDS = {
   llmBaseUrl: "llmBaseUrl",
   goveeApiKey: "goveeApiKey",
   voiceMode: "voiceMode",
+  wakeEngine: "wakeEngine",
   wakeWords: "wakeWords",
+  picovoiceAccessKey: "picovoiceAccessKey",
+  wakeModelPath: "wakeModelPath",
+  wakeSensitivity: "wakeSensitivity",
+  pythonPath: "pythonPath",
   micSource: "micSource",
   adbSerial: "adbSerial",
   deviceCaptureCmd: "deviceCaptureCmd",
@@ -37,7 +43,8 @@ export const IDS = {
 
 export const DEFAULT_STT_BASE = "http://localhost:8000/v1";
 export const DEFAULT_STT_MODEL = "Systran/faster-whisper-base.en";
-export const DEFAULT_WAKE_WORDS = "hey aura, aura";
+export const DEFAULT_WAKE_WORDS = "Lumen";
+export const DEFAULT_WAKE_MODEL = "models/Lumen_en_windows_v3_0_0.ppn";
 
 export const SETTINGS_SCHEMA: AppSettings = {
   [IDS.llmProvider]: {
@@ -87,28 +94,75 @@ export const SETTINGS_SCHEMA: AppSettings = {
     id: IDS.voiceMode,
     label: "Voice mode",
     description:
-      "Off = type only. Push-to-talk = hold mic button. Wake word = always listening for phrases like \"hey aura\" then your command (needs STT + mic).",
+      'Off = type only. Push-to-talk = hold mic. Wake word = listen for "Lumen" (true Porcupine) then your command.',
     type: SETTING_TYPES.SELECT,
     value: "off",
     options: [
       { label: "Off (type only)", value: "off" },
       { label: "Push-to-talk", value: "ptt" },
-      { label: "Wake word (always listening)", value: "wake" },
+      { label: "Wake word (Lumen)", value: "wake" },
     ],
+  },
+  [IDS.wakeEngine]: {
+    id: IDS.wakeEngine,
+    label: "Wake engine",
+    description:
+      "Auto = Porcupine when AccessKey + .ppn exist, else STT. Porcupine = true on-device keyword. STT = Whisper rolling clips (fallback).",
+    type: SETTING_TYPES.SELECT,
+    value: "auto",
+    options: [
+      { label: "Auto (prefer true Lumen)", value: "auto" },
+      { label: "Porcupine (true)", value: "porcupine" },
+      { label: "STT fallback only", value: "stt" },
+    ],
+    dependsOn: [{ settingId: IDS.voiceMode, isValue: "wake" }],
   },
   [IDS.wakeWords]: {
     id: IDS.wakeWords,
-    label: "Wake words",
-    description: 'Comma-separated. Default: "hey aura, aura". Spoken phrases that start a command.',
+    label: "Wake words (STT fallback / label)",
+    description: 'Default: Lumen. Used for STT fallback matching and UI text.',
     type: SETTING_TYPES.STRING,
     value: DEFAULT_WAKE_WORDS,
+    dependsOn: [{ settingId: IDS.voiceMode, isValue: "wake" }],
+  },
+  [IDS.picovoiceAccessKey]: {
+    id: IDS.picovoiceAccessKey,
+    label: "Picovoice AccessKey",
+    description: "From console.picovoice.ai — required for true Lumen wake (Porcupine).",
+    type: SETTING_TYPES.STRING,
+    value: "",
+    dependsOn: [{ settingId: IDS.voiceMode, isValue: "wake" }],
+  },
+  [IDS.wakeModelPath]: {
+    id: IDS.wakeModelPath,
+    label: "Wake model path (.ppn)",
+    description:
+      'Path to your Lumen Porcupine model, e.g. C:\\…\\Lumen_en_windows_v3_0_0.ppn — see docs/WAKE_WORD.md',
+    type: SETTING_TYPES.STRING,
+    value: DEFAULT_WAKE_MODEL,
+    dependsOn: [{ settingId: IDS.voiceMode, isValue: "wake" }],
+  },
+  [IDS.wakeSensitivity]: {
+    id: IDS.wakeSensitivity,
+    label: "Wake sensitivity (0–1)",
+    description: "Higher = easier to trigger. Default 0.5. Try 0.65 if it misses Lumen.",
+    type: SETTING_TYPES.STRING,
+    value: "0.5",
+    dependsOn: [{ settingId: IDS.voiceMode, isValue: "wake" }],
+  },
+  [IDS.pythonPath]: {
+    id: IDS.pythonPath,
+    label: "Python path",
+    description: "python or full path to python.exe (needs: pip install pvporcupine pvrecorder)",
+    type: SETTING_TYPES.STRING,
+    value: "python",
     dependsOn: [{ settingId: IDS.voiceMode, isValue: "wake" }],
   },
   [IDS.micSource]: {
     id: IDS.micSource,
     label: "Microphone source",
     description:
-      "Host = DeskThing PC mic (USB mic near Car Thing works). Car Thing = device's own 4 mics over ADB (run tools/superbird-mic-probe first).",
+      "Host = DeskThing PC mic. Car Thing = device mics over ADB — run tools/superbird-mic-probe.ps1 first (docs/HARDWARE_PROBE.md).",
     type: SETTING_TYPES.SELECT,
     value: "host",
     options: [
@@ -174,7 +228,12 @@ export interface AuraSettings {
   llmBaseUrl: string;
   goveeApiKey: string;
   voiceMode: VoiceMode;
+  wakeEngine: WakeEngineSetting;
   wakeWords: string;
+  picovoiceAccessKey: string;
+  wakeModelPath: string;
+  wakeSensitivity: number;
+  pythonPath: string;
   micSource: MicSource;
   adbSerial: string;
   deviceCaptureCmd: DeviceCaptureCmd;
@@ -201,9 +260,13 @@ function asProvider(v: string): LlmProvider {
 function asVoiceMode(raw: AppSettings | null): VoiceMode {
   const mode = str(raw, IDS.voiceMode, "");
   if (mode === "ptt" || mode === "wake" || mode === "off") return mode;
-  // migrate legacy boolean voiceInput
   if (bool(raw, IDS.voiceInput, false)) return "ptt";
   return "off";
+}
+
+function asWakeEngine(v: string): WakeEngineSetting {
+  if (v === "porcupine" || v === "stt" || v === "auto") return v;
+  return "auto";
 }
 
 export function resolveLlmBaseUrl(provider: LlmProvider, custom: string): string {
@@ -216,9 +279,7 @@ export function resolveLlmBaseUrl(provider: LlmProvider, custom: string): string
 export function readSettings(raw: AppSettings | null): AuraSettings {
   const llmProvider = asProvider(str(raw, IDS.llmProvider, "openrouter"));
 
-  // Prefer new keys; fall back to legacy grok* settings so existing installs keep working.
-  const llmApiKey =
-    str(raw, IDS.llmApiKey) || str(raw, IDS.grokApiKey);
+  const llmApiKey = str(raw, IDS.llmApiKey) || str(raw, IDS.grokApiKey);
   const llmModel =
     str(raw, IDS.llmModel) ||
     str(raw, IDS.grokModel) ||
@@ -229,6 +290,9 @@ export function readSettings(raw: AppSettings | null): AuraSettings {
   const deviceCaptureCmd: DeviceCaptureCmd =
     capRaw === "arecord" || capRaw === "tinycap" ? capRaw : "auto";
 
+  const sensRaw = parseFloat(str(raw, IDS.wakeSensitivity, "0.5"));
+  const wakeSensitivity = Number.isFinite(sensRaw) ? Math.max(0, Math.min(1, sensRaw)) : 0.5;
+
   return {
     llmProvider,
     llmApiKey,
@@ -236,7 +300,12 @@ export function readSettings(raw: AppSettings | null): AuraSettings {
     llmBaseUrl: str(raw, IDS.llmBaseUrl),
     goveeApiKey: str(raw, IDS.goveeApiKey),
     voiceMode: asVoiceMode(raw),
+    wakeEngine: asWakeEngine(str(raw, IDS.wakeEngine, "auto")),
     wakeWords: str(raw, IDS.wakeWords, DEFAULT_WAKE_WORDS) || DEFAULT_WAKE_WORDS,
+    picovoiceAccessKey: str(raw, IDS.picovoiceAccessKey),
+    wakeModelPath: str(raw, IDS.wakeModelPath, DEFAULT_WAKE_MODEL) || DEFAULT_WAKE_MODEL,
+    wakeSensitivity,
+    pythonPath: str(raw, IDS.pythonPath, "python") || "python",
     micSource,
     adbSerial: str(raw, IDS.adbSerial),
     deviceCaptureCmd,

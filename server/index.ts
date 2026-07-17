@@ -71,28 +71,35 @@ function pushDevices(): void {
 /* --------------------------- (re)configuration ---------------------------- */
 
 function syncWakeLoop(): void {
+  // Porcupine only needs mic after wake for the command; STT still required for command text.
+  // Host PvRecorder is used for Porcupine itself (always host mic for keyword spotting).
   const want =
     !!settings &&
     settings.voiceMode === "wake" &&
-    !!recorder?.available &&
     !!stt?.configured &&
-    parseWakeWords(settings.wakeWords).length > 0;
+    (parseWakeWords(settings.wakeWords).length > 0 ||
+      !!settings.picovoiceAccessKey);
+
+  // Always rebuild wake loop when settings change so engine/key/path apply.
+  wake?.stop();
+  wake = null;
 
   if (want) {
-    if (!wake) {
-      wake = new WakeLoop({
-        getRecorder: () => recorder,
-        getStt: () => stt,
-        getWakeWords: () => parseWakeWords(settings?.wakeWords ?? ""),
-        isBusy: () => busy || pttActive,
-        isEnabled: () => settings?.voiceMode === "wake",
-        onStatus: setStatus,
-        onUtterance: (text) => handleUtterance(text, true),
-      });
-    }
-    if (!wake.active) wake.start();
-  } else {
-    wake?.stop();
+    wake = new WakeLoop({
+      getRecorder: () => recorder,
+      getStt: () => stt,
+      getWakeWords: () => parseWakeWords(settings?.wakeWords ?? "Lumen"),
+      getEngine: () => settings?.wakeEngine ?? "auto",
+      getPicovoiceKey: () => settings?.picovoiceAccessKey ?? "",
+      getModelPath: () => settings?.wakeModelPath ?? "",
+      getSensitivity: () => settings?.wakeSensitivity ?? 0.5,
+      getPythonPath: () => settings?.pythonPath ?? "python",
+      isBusy: () => busy || pttActive,
+      isEnabled: () => settings?.voiceMode === "wake",
+      onStatus: setStatus,
+      onUtterance: (text) => handleUtterance(text, true),
+    });
+    wake.start();
   }
 }
 

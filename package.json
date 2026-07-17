@@ -1,7 +1,7 @@
 {
   "name": "aura",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "dist/index.js",
   "description": "Talk to your house: OpenRouter/any-LLM voice + chat control for Govee lights on a jailbroken Spotify Car Thing via DeskThing.",

@@ -75,7 +75,7 @@ const PushToTalk: React.FC<Props> = ({
         <span className="text-xs text-white/60 text-center px-2 leading-snug">
           {listening
             ? statusDetail || "Listening…"
-            : statusDetail || 'Wake word on — say "hey aura"'}
+            : statusDetail || 'Wake word on — say "Lumen"'}
         </span>
         <button
           type="button"

@@ -6,7 +6,7 @@ Aura turns the little $10-off-eBay Car Thing into an always-on smart-home panel.
 
 It's a [DeskThing](https://deskthing.app) app: React UI on the Car Thing, Node server on the host. Server talks to your **LLM**, **Govee**, and optional **STT**.
 
-> **Status:** v0.2 — OpenRouter + multi-provider LLM, wake-word mode (STT-based), push-to-talk, host or Car Thing mics (ADB), Govee tools. Install the release zip, not GitHub source.
+> **Status:** v0.3 — OpenRouter, **true “Lumen” wake** (Porcupine), STT fallback, Windows **hardware mic probe**, Car Thing ADB mics, Govee. Install the release zip, not GitHub source.
 
 ---
 
@@ -137,12 +137,13 @@ Then in the **DeskThing desktop app**: *Downloads → Load from file →* pick `
 | **LLM API Key** | <https://openrouter.ai/keys> (or xAI / your provider) |
 | **Model id** | e.g. `openai/gpt-4o-mini`, `anthropic/claude-3.5-sonnet`, `x-ai/grok-4-fast` |
 | **Govee API Key** | Govee Home → *Settings → Apply for API Key* |
-| **Voice mode** | Off / Push-to-talk / **Wake word** |
-| **Wake words** | Default `hey aura, aura` |
-| **Mic source** | Host PC or Car Thing (ADB) — see [`docs/MICROPHONE.md`](docs/MICROPHONE.md) |
-| **STT server URL** | Local Whisper (recommended) or OpenAI |
+| **Voice mode** | Off / Push-to-talk / **Wake word (Lumen)** |
+| **Wake engine** | Auto / Porcupine (true) / STT fallback |
+| **Picovoice AccessKey + .ppn** | True Lumen — see [`docs/WAKE_WORD.md`](docs/WAKE_WORD.md) |
+| **Mic source** | Host or Car Thing — probe: `tools/superbird-mic-probe.ps1` ([walkthrough](docs/HARDWARE_PROBE.md)) |
+| **STT server URL** | Local Whisper (required for commands after wake) |
 
-Full detail: [`docs/API_KEYS.md`](docs/API_KEYS.md). Setup card clears when LLM + Govee keys are set.
+Full detail: [`docs/API_KEYS.md`](docs/API_KEYS.md) · [`docs/WAKE_WORD.md`](docs/WAKE_WORD.md) · [`docs/HARDWARE_PROBE.md`](docs/HARDWARE_PROBE.md).
 
 ---
 
