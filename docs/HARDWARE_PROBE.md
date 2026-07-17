@@ -29,19 +29,41 @@ We do **not** fight the browser. We record **on the device** and pull the WAV ov
 
 ## Step 1 — Run the probe (Windows)
 
-In PowerShell from the repo root:
+DeskThing already using the Car Thing = ADB works. You only need `adb` on PATH
+(platform-tools + DeskThing **Settings → Device → Use Global ADB**).
+
+### Quick probe (one 3s test)
 
 ```powershell
 cd path\to\deskthing
 .\tools\superbird-mic-probe.ps1
 ```
 
+### Full bruteforce (mics + speakers)
+
+Leaves DeskThing open. Sweeps capture card/device/channels, mixer toggles,
+and plays a short tone through playback devices:
+
+```powershell
+adb devices   # must show "device"
+cd path\to\deskthing
+.\tools\superbird-audio-bruteforce.ps1
+```
+
+Results land in `superbird-audio-bruteforce\` (WAVs + `REPORT.txt`).  
+**Capture:** open the highest-`energy` WAV — if you hear your voice, that tag is the winner.  
+**Playback:** listen during the “PLAY try […]” lines — if you hear a beep, that path works.
+
 If you have more than one ADB device:
 
 ```powershell
 adb devices
 .\tools\superbird-mic-probe.ps1 -Serial YOUR_SERIAL
+.\tools\superbird-audio-bruteforce.ps1 -Serial YOUR_SERIAL
 ```
+
+When this chat is open **on the Car Thing PC**, ask the agent to run the
+bruteforce script and interpret the report — same machine, same `adb`.
 
 ### Linux / macOS
 
